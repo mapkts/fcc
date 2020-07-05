@@ -10,7 +10,7 @@
 //!
 //! # Example
 //!
-//! The core functionality of this crate is provided by [`Concat`] type builder. 
+//! The core functionality of this crate is provided by [`Concat`] type builder.
 //!
 //! The following example concatenates a list of csv files with some tweaks and
 //! prints the result:
@@ -32,7 +32,7 @@
 //!
 //!     Ok(())
 //! }
-//!  
+//!
 //! ```
 //!
 //! [`Concat`]: struct.Concat.html
@@ -42,4 +42,7 @@ mod error;
 pub use error::{Error, ErrorKind, Result};
 
 mod concat;
-pub use concat::{ends_with_newline, get_last_byte, Concat};
+pub use concat::Concat;
+
+mod util;
+pub use util::{ends_with_newline, get_last_byte};
