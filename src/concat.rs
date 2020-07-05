@@ -46,7 +46,7 @@ struct ConcatOptions {
 }
 
 impl<P: AsRef<Path>> Concat<P> {
-    /// Creates a new `Concat` instance.
+    /// Constructs a new empty `Concat` instance.
     ///
     /// # Examples
     ///
