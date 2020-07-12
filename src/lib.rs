@@ -4,7 +4,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! fcc = "0.1"
+//! fcc = "0.2"
 //! ```
 //!
 //!
@@ -24,7 +24,7 @@
 //!     let mut concat = Concat::new()
 //!         .newline(true) // appends a '\n' to each file if the file does not ends with '\n'
 //!         .header(true) // extracts the headers from each file
-//!         .skip_line(2) // skips the first two lines of each file
+//!         .skip_end(1) // skips last line when concatenating
 //!         .pad_with(b"---end of file---\n") // fills some paddings between files
 //!         .open(files);
 //!
@@ -42,7 +42,7 @@ mod error;
 pub use error::{Error, ErrorKind, Result};
 
 mod concat;
-pub use concat::Concat;
+pub use concat::{ByteSeeker, Concat};
 
 mod util;
 pub use util::{ends_with_newline, get_last_byte};

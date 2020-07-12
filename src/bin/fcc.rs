@@ -53,12 +53,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .help("Preserves the header of the first passed-in file and drops the rest"),
         )
         .arg(
-            Arg::with_name("skip")
+            Arg::with_name("skip_start")
                 .short("s")
-                .long("skip")
+                .long("skip_start")
                 .takes_value(true)
                 .value_name("NUMBER")
-                .help("Drops first n lines in each file while concatenating"),
+                .help("Drops n lines from the beginning of each file while concatenating"),
+        )
+        .arg(
+            Arg::with_name("skip_end")
+                .short("e")
+                .long("skip_end")
+                .takes_value(true)
+                .value_name("NUMBER")
+                .help("Drops n lines from the end of each file while concatenating"),
         )
         .arg(
             Arg::with_name("padding")
@@ -67,6 +75,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .takes_value(true)
                 .value_name("STRING")
                 .help("Fills some paddings between each file while concatenating"),
+        )
+        .arg(
+            Arg::with_name("crlf")
+                .short("c")
+                .long("crlf")
+                .help("Uses `\\r\\n` for newline instead of default `\\n`"),
         )
         .get_matches();
 
@@ -105,13 +119,20 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     if matches.is_present("header") {
         concat.header(true);
     }
-    if matches.is_present("skip") {
-        let n = matches.value_of("skip").unwrap().parse::<usize>()?;
-        concat.skip_line(n);
+    if matches.is_present("skip_start") {
+        let n = matches.value_of("skip_start").unwrap().parse::<usize>()?;
+        concat.skip_start(n);
+    }
+    if matches.is_present("skip_end") {
+        let n = matches.value_of("skip_end").unwrap().parse::<usize>()?;
+        concat.skip_start(n);
     }
     if matches.is_present("padding") {
         let padding = matches.value_of("padding").unwrap().as_bytes();
         concat.pad_with(padding);
+    }
+    if matches.is_present("crlf") {
+        concat.use_crlf(true);
     }
     let concat = concat.open(input);
 

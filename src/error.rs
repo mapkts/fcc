@@ -38,8 +38,10 @@ pub enum ErrorKind {
     Io(io::Error),
     /// Occurs if there is nothing to concat.
     NothingPassed,
-    /// This error occurs when seeking to a negative offset.
+    /// Occurs when seeking to a negative offset.
     Seek,
+    /// Occurs if the seeking byte is not found.
+    ByteNotFound,
     /// Hints that implies destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this
@@ -56,6 +58,7 @@ impl fmt::Display for Error {
                 write!(f, "Cannot construct a `Concat` instance with no paths")
             }
             ErrorKind::Seek => write!(f, "Seek to a negative offset"),
+            ErrorKind::ByteNotFound => write!(f, "Byte not found"),
             _ => unreachable!(),
         }
     }

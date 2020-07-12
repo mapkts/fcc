@@ -1,5 +1,5 @@
 use std::fs::{self, File};
-use std::io::{BufRead, BufReader, Write};
+use std::io::{self, BufRead, BufReader, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use crate::error::{Error, ErrorKind, Result};
@@ -11,6 +11,11 @@ use crate::util::ends_with_newline;
 /// then chain calls to methods to set each configuration, then call [`open`],
 /// passing the paths of files you're trying to concatenate. And eventually,
 /// call [`write`] to actually concatenate files and write the result.
+///
+/// Generally speaking, when using `concat`, you'll first call [`new`],
+/// then chain calls to methods to set each configuration, then call [`oepn`], passing the paths of
+/// files you're trying to concatenate. And eventually, call [`write`] to actually concatenate
+/// files and write the result.
 ///
 /// [`new`]: struct.Concat.html#method.new
 /// [`open`]: struct.Concat.html#method.open
@@ -33,15 +38,18 @@ use crate::util::ends_with_newline;
 #[derive(Clone, Debug)]
 pub struct Concat<P: AsRef<Path>> {
     paths: Vec<P>,
-    options: ConcatOptions,
+    opts: ConcatOptions,
+    view: bool,
 }
 
-/// Options to set configurations.
+// Represents `Concat`s configurations.
 #[derive(Clone, Default, Debug)]
 struct ConcatOptions {
-    skip: usize,
+    skip_start: usize,
+    skip_end: usize,
     header: bool,
     newline: bool,
+    crlf: bool,
     padding: Option<Vec<u8>>,
 }
 
@@ -63,7 +71,8 @@ impl<P: AsRef<Path>> Concat<P> {
     pub fn new() -> Self {
         Concat {
             paths: Default::default(),
-            options: Default::default(),
+            opts: Default::default(),
+            view: Default::default(),
         }
     }
 
@@ -84,9 +93,14 @@ impl<P: AsRef<Path>> Concat<P> {
     /// }
     /// ```
     pub fn open(&self, paths: Vec<P>) -> Self {
+        let view = self.opts.newline
+            || self.opts.header
+            || self.opts.skip_start != 0
+            || self.opts.skip_end != 0;
         Concat {
             paths: paths,
-            options: self.options.clone(),
+            opts: self.opts.clone(),
+            view: view,
         }
     }
 
@@ -106,7 +120,7 @@ impl<P: AsRef<Path>> Concat<P> {
     /// }
     /// ```
     pub fn newline(&mut self, newline: bool) -> &mut Self {
-        self.options.newline = newline;
+        self.opts.newline = newline;
         self
     }
 
@@ -120,23 +134,44 @@ impl<P: AsRef<Path>> Concat<P> {
     ///
     /// fn main() -> Result<()> {
     ///     let mut concat = Concat::new();
-    ///     let concat = concat.skip_line(1).open(vec!["foo.csv", "bar.csv"]);
+    ///     let concat = concat.skip_start(1).open(vec!["foo.csv", "bar.csv"]);
     ///     concat.write(&mut std::io::stdout())?;
     ///     Ok(())
     /// }
     /// ```
-    pub fn skip_line(&mut self, n: usize) -> &mut Self {
-        self.options.skip = n;
+    pub fn skip_start(&mut self, skip: usize) -> &mut Self {
+        self.opts.skip_start = skip;
+        self
+    }
+
+    /// Controls how many lines are skipped from the end of each file
+    /// while concatenating.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use fcc::{Concat, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let mut concat = Concat::new();
+    ///     let concat = concat.skip_end(1).open(vec!["foo.csv", "bar.csv"]);
+    ///     concat.write(&mut std::io::stdout())?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn skip_end(&mut self, skip: usize) -> &mut Self {
+        self.opts.skip_end = skip;
         self
     }
 
     /// Sets the option to extract the header of each file and put
     /// the first extracted header to the beginning of concatenation result.
     ///
-    /// Note that this method will also set [`skip`] to 1 simultaneously
+    /// Note that this method will also set [`skip_start`] to 1 simultaneously
     /// due to its semantics. In other words, `header(true)` is equivalent to
-    /// `header(true).skip(1)`. If you are intended to skip more than one line,
-    /// set `skip` option after setting `header(true)`.
+    /// `header(true).skip_start(1)`. If you are intended to skip more than one line
+    /// from the beginning of each file, remember to set `skip_start` option after
+    /// setting `header(true)`.
     ///
     /// # Examples
     ///
@@ -151,10 +186,10 @@ impl<P: AsRef<Path>> Concat<P> {
     /// }
     /// ```
     ///
-    /// [`skip`]: struct.Concat.html#method.skip
+    /// [`skip_start`]: struct.Concat.html#method.skip_start
     pub fn header(&mut self, header: bool) -> &mut Self {
-        self.options.header = header;
-        self.options.skip = 1;
+        self.opts.header = header;
+        self.opts.skip_start = 1;
         self
     }
 
@@ -173,11 +208,11 @@ impl<P: AsRef<Path>> Concat<P> {
     /// }
     /// ```
     pub fn pad_with(&mut self, padding: &[u8]) -> &mut Self {
-        self.options.padding = Some(padding.to_owned());
+        self.opts.padding = Some(padding.to_owned());
         self
     }
 
-    /// Triggers the file concatenation process and writes the result.
+    /// Use `\r\n` for newline instead of `\n`.
     ///
     /// # Examples
     ///
@@ -186,68 +221,14 @@ impl<P: AsRef<Path>> Concat<P> {
     ///
     /// fn main() -> Result<()> {
     ///     let mut concat = Concat::new();
-    ///     let concat = concat.header(true).pad_with(b"some padding").open(vec!["foo.csv", "bar.csv"]);
+    ///     let concat = concat.newline(true).open(vec!["foo.csv", "bar.csv"]);
     ///     concat.write(&mut std::io::stdout())?;
     ///     Ok(())
     /// }
     /// ```
-    pub fn write<W: Write>(self, writer: &mut W) -> Result<()> {
-        // Writes the header (if any).
-        let header = match self.options.header {
-            true => self.get_header()?,
-            false => Vec::new(),
-        };
-        writer.write_all(&header)?;
-
-        // Dumps invalid paths.
-        let mut paths = Vec::new();
-        for path in self.paths.iter() {
-            if fs::metadata(path)?.is_file() {
-                paths.push(path);
-            }
-        }
-
-        // Concatenates the given files.
-        let mut has_eof = false;
-        for path in self.paths.iter() {
-            let mut file = File::open(path)?;
-            has_eof = ends_with_newline(&mut file)?;
-            let mut reader = BufReader::new(file);
-
-            if self.options.skip > 0 {
-                let mut buf = Vec::new();
-                let mut counter = 0;
-                while counter < self.options.skip {
-                    reader.read_until(b'\n', &mut buf)?;
-                    counter += 1;
-                }
-            }
-
-            loop {
-                let buffer = reader.fill_buf()?;
-                let length = buffer.len();
-                if length == 0 {
-                    break;
-                }
-                writer.write_all(buffer)?;
-                reader.consume(length);
-            }
-
-            if self.options.newline && !has_eof {
-                writer.write(&vec![b'\n'])?;
-            }
-
-            if let Some(padding) = self.options.padding.clone() {
-                writer.write(&padding)?;
-            }
-        }
-
-        // Writes a newline if the concatenation result doesn't end with newline.
-        if !self.options.newline && !has_eof {
-            writer.write(&[b'\n'])?;
-        }
-
-        Ok(())
+    pub fn use_crlf(&mut self, crlf: bool) -> &mut Self {
+        self.opts.crlf = crlf;
+        self
     }
 
     /// Retrieves the header of the first passed-in file.
@@ -274,5 +255,507 @@ impl<P: AsRef<Path>> Concat<P> {
         reader.read_until(b'\n', &mut header)?;
 
         Ok(header)
+    }
+
+    /// Triggers the file concatenation process and writes the result.
+    ///
+    /// # Examples
+    ///
+    /// ```no_run
+    /// use fcc::{Concat, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let mut concat = Concat::new();
+    ///     let concat = concat.header(true).pad_with(b"some padding").open(vec!["foo.csv", "bar.csv"]);
+    ///     concat.write(&mut std::io::stdout())?;
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn write<W: Write>(self, writer: &mut W) -> Result<()> {
+        // Dumps invalid paths.
+        let mut paths = Vec::new();
+        for path in self.paths.iter() {
+            if fs::metadata(path)?.is_file() {
+                paths.push(path);
+            }
+        }
+
+        self.write_header(writer)?;
+
+        // Concatenates the given files.
+        let mut has_eof = false;
+        for path in self.paths.iter() {
+            let mut file = File::open(path)?;
+            has_eof = ends_with_newline(&mut file)?;
+            let mut reader = BufReader::new(file);
+
+            if self.opts.skip_start > 0 {
+                let mut buf = Vec::new();
+                let mut counter = 0;
+                while counter < self.opts.skip_start {
+                    reader.read_until(b'\n', &mut buf)?;
+                    counter += 1;
+                }
+            }
+
+            loop {
+                let buffer = reader.fill_buf()?;
+                let length = buffer.len();
+                if length == 0 {
+                    break;
+                }
+                writer.write_all(buffer)?;
+                reader.consume(length);
+            }
+
+            if self.opts.newline && !has_eof {
+                writer.write(&vec![b'\n'])?;
+            }
+
+            if let Some(padding) = self.opts.padding.clone() {
+                writer.write(&padding)?;
+            }
+        }
+
+        // Writes a newline if the concatenation result doesn't end with newline.
+        if !has_eof {
+            writer.write(&[b'\n'])?;
+        }
+
+        Ok(())
+    }
+
+    fn write_header<W: Write>(&self, writer: &mut W) -> Result<()> {
+        if self.opts.header {
+            let header = self.get_header()?;
+            writer.write_all(&header)?;
+        }
+        Ok(())
+    }
+
+    /*fn write_contents<W: Write>(&self, path: P, writer: &mut W) -> Result<()> {
+        let mut file = File::open(path)?;
+
+        if !self.view {
+             Just copy the file if viewing into the file is not required.
+            io::copy(&mut file, writer)?;
+        } else {
+            if self.opts.skip_start > 0 {}
+
+            if self.opts.newline {
+                if ends_with_newline(&mut file)? {
+                    writer.write(self.newline)?;
+                }
+            }
+        }
+
+        Ok(())
+    }*/
+}
+
+const DEFUALT_CHUNK_SIZE: usize = 1024 * 4;
+
+/// A `Seeker` walks through anything that implements `Read` and `Seek`
+/// to find the position of a certain `byte`.
+#[derive(Debug)]
+pub struct ByteSeeker<'a, RS: 'a + Read + Seek> {
+    inner: &'a mut RS,
+    buf: Vec<u8>,
+    len: usize,
+    lpos: usize,
+    rpos: usize,
+    done: bool,
+    oneleft: bool,
+}
+
+impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
+    /// Creates a new `ByteSeeker` from something that implements `Read` and `Seek`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use fcc::{ByteSeeker, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let mut cursor = Cursor::new(vec![1, 2, b'\n', 3]);
+    ///     let mut seeker = ByteSeeker::new(&mut cursor);
+    ///
+    ///     let pos = seeker.seek(b'\n')?;
+    ///     assert_eq!(pos, 2);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn new(inner: &'a mut RS) -> Self {
+        // SAFETY: The unwraps here are safe beacause no negative offset has been sought.
+        let len = inner.seek(SeekFrom::End(0)).unwrap() as usize;
+        inner.seek(SeekFrom::Start(0)).unwrap();
+
+        println!("self.len: {}", len);
+
+        Self {
+            inner: inner,
+            buf: vecu8(DEFUALT_CHUNK_SIZE as usize),
+            len: len,
+            lpos: 0,
+            rpos: if len == 0 { 0 } else { len - 1 },
+            done: false,
+            oneleft: false,
+        }
+    }
+
+    /// Searches for a specified byte (forward) from the last `seek` position.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use fcc::{ByteSeeker, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let mut cursor = Cursor::new(vec![b'\n', 0, b'\n']);
+    ///     let mut seeker = ByteSeeker::new(&mut cursor);
+    ///
+    ///     let pos = seeker.seek(b'\n')?;
+    ///     assert_eq!(pos, 0);
+    ///     let pos = seeker.seek(b'\n')?;
+    ///     assert_eq!(pos, 2);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn seek(&mut self, byte: u8) -> Result<usize> {
+        if self.done || self.len == 0 {
+            return Err(Error::new(ErrorKind::ByteNotFound));
+        }
+
+        if self.len == 1 || self.oneleft {
+            let mut buf = [0; 1];
+            self.inner.read_exact(&mut buf)?;
+            self.done = true;
+            if buf[0] == byte {
+                return Ok(0);
+            } else {
+                return Err(Error::new(ErrorKind::ByteNotFound));
+            }
+        }
+
+        loop {
+            // Reads a chunk of contents.
+            let remaining = self.len - self.lpos;
+            // If the length of remaining bytes is greater than the length of internal buffer, just
+            // read the exact number of bytes required to fill the internal buffer. Otherwise, we
+            // truncate the length of internal buffer to the length of remaining bytes.
+            let mut buflen = self.buf.len();
+            let mut is_last_read = false;
+            if remaining < buflen {
+                unsafe {
+                    self.buf.set_len(remaining);
+                }
+                buflen = remaining;
+                is_last_read = true;
+            }
+            self.inner.read_exact(&mut self.buf)?;
+
+            if let Some(pos) = self.buf.iter().position(|&x| x == byte) {
+                let cpos = self.lpos + pos;
+                self.lpos = self.inner.seek(SeekFrom::Start((cpos + 1) as u64))? as usize;
+                if self.lpos > self.len - 1 {
+                    self.oneleft = true;
+                }
+                return Ok(cpos);
+            } else {
+                if is_last_read {
+                    self.done = true;
+                    return Err(Error::new(ErrorKind::ByteNotFound));
+                } else {
+                    self.lpos = self
+                        .inner
+                        .seek(SeekFrom::Start((self.lpos + buflen) as u64))?
+                        as usize;
+                }
+            }
+        }
+    }
+
+    /// Searches for a specified byte (backward) from the last `seek_back` position.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use fcc::{ByteSeeker, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     let mut cursor = Cursor::new(vec![b'\n', 0, b'\n']);
+    ///     let mut seeker = ByteSeeker::new(&mut cursor);
+    ///
+    ///     let pos = seeker.seek_back(b'\n')?;
+    ///     assert_eq!(pos, 2);
+    ///     let pos = seeker.seek_back(b'\n')?;
+    ///     assert_eq!(pos, 0);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn seek_back(&mut self, byte: u8) -> Result<usize> {
+        if self.done || self.len == 0 {
+            println!("loc 1");
+            return Err(Error::new(ErrorKind::ByteNotFound));
+        }
+
+        if self.len == 1 || self.oneleft {
+            println!("loc 2");
+            let mut buf = [0; 1];
+            self.inner.read_exact(&mut buf)?;
+            self.done = true;
+            if buf[0] == byte {
+                return Ok(0);
+            } else {
+                return Err(Error::new(ErrorKind::ByteNotFound));
+            }
+        }
+
+        loop {
+            // Reads a chunk of contents.
+            let remaining = self.rpos + 1;
+            println!("remaining: {}, rpos: {}", remaining, self.rpos);
+            // If the length of remaining bytes is greater than the length of internal buffer, just
+            // read the exact number of bytes required to fill the internal buffer. Otherwise, we
+            // truncate the length of internal buffer to the length of remaining bytes.
+            let mut buflen = self.buf.len();
+            let mut is_last_read = false;
+            if remaining < buflen {
+                unsafe {
+                    self.buf.set_len(remaining);
+                }
+                buflen = remaining;
+                is_last_read = true;
+            }
+            self.rpos =
+                self.inner
+                    .seek(SeekFrom::Start((remaining - buflen) as u64))? as usize;
+            println!("before rpos: {}", self.rpos);
+            self.inner.read_exact(&mut self.buf)?;
+
+            if let Some(pos) = self.buf.iter().rev().position(|&x| x == byte) {
+                let cpos = self.rpos + (buflen - pos - 1);
+                if cpos == 0 {
+                    self.done = true;
+                    return Ok(cpos);
+                }
+                self.rpos = self.inner.seek(SeekFrom::Start((cpos - 1) as u64))? as usize;
+                println!("after success rpos: {}", self.rpos);
+                if self.rpos == 0 {
+                    self.oneleft = true;
+                }
+                return Ok(cpos);
+            } else {
+                if is_last_read {
+                    self.done = true;
+                    self.rpos = self.inner.seek(SeekFrom::Start(0))? as usize;
+                    println!("after last_read rpos: {}", self.rpos);
+                    return Err(Error::new(ErrorKind::ByteNotFound));
+                } else {
+                    /*self.rpos = self
+                    .inner
+                    .seek(SeekFrom::Start((self.rpos - buflen) as u64))?
+                    as usize;*/
+                    println!("after failed rpos: {}", self.rpos);
+                }
+            }
+        }
+    }
+}
+
+// Initializes a `Vec<u8>` whose capacity and length are exactly the same.
+fn vecu8(len: usize) -> Vec<u8> {
+    let mut vec = Vec::with_capacity(len);
+    unsafe {
+        vec.set_len(len);
+    }
+    vec
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use std::iter;
+
+    #[test]
+    fn test_vecu8() {
+        let vec = vecu8(0);
+        assert_eq!(vec.len(), 0);
+        assert_eq!(vec.capacity(), 0);
+
+        let vec = vecu8(42);
+        assert_eq!(vec.len(), 42);
+        assert_eq!(vec.capacity(), 42);
+    }
+
+    #[test]
+    fn test_seek_vec0() {
+        // TODO: Should update the implementation of `Error` and `ErrorKind` to make it possible to
+        // compare if two errors are equivalent. By new we just check if there is an error or not.
+
+        // test empty vec<u8>
+        let bytes: Vec<u8> = vec![];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_vec1() {
+        // test vec<u8> with only 1 byte.
+        let bytes: Vec<u8> = vec![b'0'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = vec![b'\n'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek(b'\n').unwrap(), 0);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_vec3() {
+        // test vec<u8> with 3 bytes.
+        let bytes: Vec<u8> = vec![b'\n', 0, b'\n'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek(b'\n').unwrap(), 0);
+        assert_eq!(seeker.seek(b'\n').unwrap(), 2);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = vec![0, 0, 0];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_vecn() {
+        // test vec<u8> with more than `DEFUALT_CHUNK_SIZE` bytes.
+        let bytes: Vec<u8> = iter::repeat(0)
+            .take(DEFUALT_CHUNK_SIZE)
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(DEFUALT_CHUNK_SIZE))
+            .chain(iter::repeat(b'\n').take(1))
+            .collect();
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek(b'\n').unwrap(), DEFUALT_CHUNK_SIZE);
+        assert_eq!(seeker.seek(b'\n').unwrap(), DEFUALT_CHUNK_SIZE * 2 + 1);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = iter::repeat(0).take(DEFUALT_CHUNK_SIZE + 42).collect();
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_back_vec0() {
+        // test empty vec<u8>
+        let bytes: Vec<u8> = vec![];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_back_vec1() {
+        // test vec<u8> with only 1 byte.
+        let bytes: Vec<u8> = vec![b'0'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = vec![b'\n'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek_back(b'\n').unwrap(), 0);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_back_vec3() {
+        // test vec<u8> with 3 bytes.
+        let bytes: Vec<u8> = vec![b'\n', 0, b'\n'];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek_back(b'\n').unwrap(), 2);
+        assert_eq!(seeker.seek_back(b'\n').unwrap(), 0);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = vec![0, 0, 0];
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_back_vecn() {
+        // test vec<u8> with more than `DEFUALT_CHUNK_SIZE` bytes.
+        let bytes: Vec<u8> = iter::repeat(0)
+            .take(DEFUALT_CHUNK_SIZE)
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(DEFUALT_CHUNK_SIZE))
+            .chain(iter::repeat(b'\n').take(1))
+            .collect();
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek_back(b'\n').unwrap(), DEFUALT_CHUNK_SIZE * 2 + 1);
+        assert_eq!(seeker.seek_back(b'\n').unwrap(), DEFUALT_CHUNK_SIZE);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+
+        let bytes: Vec<u8> = iter::repeat(0).take(DEFUALT_CHUNK_SIZE + 42).collect();
+        let mut cursor = Cursor::new(bytes);
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
     }
 }
