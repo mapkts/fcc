@@ -333,24 +333,54 @@ impl<P: AsRef<Path>> Concat<P> {
         Ok(())
     }
 
-    /*fn write_contents<W: Write>(&self, path: P, writer: &mut W) -> Result<()> {
+    fn write_contents<W: Write>(&self, path: P, writer: &mut W) -> Result<()> {
         let mut file = File::open(path)?;
 
+        let ends_nl = ends_with_newline(&mut file)?;
+
         if !self.view {
-             Just copy the file if viewing into the file is not required.
+            // Just copy the file if viewing into the file is not required.
             io::copy(&mut file, writer)?;
         } else {
-            if self.opts.skip_start > 0 {}
+            if self.opts.skip_start > 0 || self.opts.skip_end > 0 {
+                let mut seeker = ByteSeeker::new(&mut file);
+                let start = seeker.seek_nth(b'\n', self.opts.skip_end)? as u64;
+                seeker.reset();
+                let end = seeker.seek_nth_back(b'\n', self.opts.skip_end)? as u64;
+                seeker.reset();
 
-            if self.opts.newline {
-                if ends_with_newline(&mut file)? {
-                    writer.write(self.newline)?;
+                let mut reader = BufReader::new(file);
+                let mut buf = [0; 1];
+                reader.seek(SeekFrom::Start(end - 1))?;
+                reader.read_exact(&mut buf)?;
+
+                let handle = if buf[0] == b'\r' {
+                    reader.take(end - 1)
+                } else {
+                    reader.take(end)
+                };
+
+                let mut f = handle.into_inner();
+                f.seek(SeekFrom::Start(start - 1))?;
+                loop {
+                    let buffer = f.fill_buf()?;
+                    let length = buffer.len();
+                    if length == 0 {
+                        break;
+                    }
+                    writer.write_all(buffer)?;
+                    f.consume(length);
                 }
+            }
+
+            if self.opts.newline && !ends_nl {
+                let newline = if self.opts.crlf { "\r\n" } else { "\n" };
+                writer.write(newline.as_bytes())?;
             }
         }
 
         Ok(())
-    }*/
+    }
 }
 
 const DEFUALT_CHUNK_SIZE: usize = 1024 * 4;
@@ -378,6 +408,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// use fcc::{ByteSeeker, Result};
     ///
     /// fn main() -> Result<()> {
+    ///     // `Cursor` implements `Read` and `Seek`.
     ///     let mut cursor = Cursor::new(vec![1, 2, b'\n', 3]);
     ///     let mut seeker = ByteSeeker::new(&mut cursor);
     ///
@@ -391,11 +422,9 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
         let len = inner.seek(SeekFrom::End(0)).unwrap() as usize;
         inner.seek(SeekFrom::Start(0)).unwrap();
 
-        println!("self.len: {}", len);
-
         Self {
             inner: inner,
-            buf: vecu8(DEFUALT_CHUNK_SIZE as usize),
+            buf: vecu8(DEFUALT_CHUNK_SIZE),
             len: len,
             lpos: 0,
             rpos: if len == 0 { 0 } else { len - 1 },
@@ -404,7 +433,125 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
         }
     }
 
-    /// Searches for a specified byte (forward) from the last `seek` position.
+    /// Reset the initialized `ByteSeeker` to its original state.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use fcc::{ByteSeeker, Result};
+    ///
+    /// fn main() -> Result<()> {
+    ///     // `Cursor` implements `Read` and `Seek`.
+    ///     let mut cursor = Cursor::new(vec![1, b'\n', 3, b'\n']);
+    ///     let mut seeker = ByteSeeker::new(&mut cursor);
+    ///
+    ///     let pos = seeker.seek(b'\n')?;
+    ///     assert_eq!(pos, 1);
+    ///
+    ///     seeker.reset();
+    ///     let pos = seeker.seek_back(b'\n')?;
+    ///     assert_eq!(pos, 3);
+    ///     Ok(())
+    /// }
+    /// ```
+    pub fn reset(&mut self) {
+        self.inner.seek(SeekFrom::Start(0)).unwrap() as usize;
+        self.buf = vecu8(DEFUALT_CHUNK_SIZE);
+        self.lpos = 0;
+        self.rpos = if self.len == 0 { 0 } else { self.len - 1 };
+        self.done = false;
+        self.oneleft = false;
+    }
+
+    /// Seeks the nth occurence of a specific byte **forwards**, and
+    /// returns the new position from the start of the byte stream.
+    ///
+    /// # Errors
+    ///
+    /// If the nth occurence of the given byte cannot be found, an error of
+    /// `ErrorKind::ByteNotFound` will be returned. If any other IO errors was encountered, an error of
+    /// `ErrorKind::Io` will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use std::iter;
+    /// use fcc::ByteSeeker;
+    ///
+    /// let bytes: Vec<u8> = iter::repeat(0)
+    ///     .take(100)
+    ///     .chain(iter::repeat(b'\n').take(1))
+    ///     .chain(iter::repeat(1).take(100))
+    ///     .chain(iter::repeat(b'\n').take(1))
+    ///     .chain(iter::repeat(2).take(100))
+    ///     .collect();
+    ///
+    /// let mut cursor = Cursor::new(bytes);
+    /// let mut seeker = ByteSeeker::new(&mut cursor);
+    /// assert_eq!(seeker.seek_nth(b'\n', 2).unwrap(), 100 + 1 + 100);
+    /// ```
+    pub fn seek_nth(&mut self, byte: u8, nth: usize) -> Result<usize> {
+        let mut counter = nth;
+        loop {
+            let pos = self.seek(byte)?;
+            counter -= 1;
+            if counter == 0 {
+                return Ok(pos);
+            }
+        }
+    }
+
+    /// Seeks the nth occurence of a specific byte **backwards**, and
+    /// returns the new position from the start of the byte stream.
+    ///
+    /// # Errors
+    ///
+    /// If the nth occurence of the given byte cannot be found, an error of
+    /// `ErrorKind::ByteNotFound` will be returned. If any other IO errors was encountered, an error of
+    /// `ErrorKind::Io` will be returned.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use std::iter;
+    /// use fcc::ByteSeeker;
+    ///
+    /// let bytes: Vec<u8> = iter::repeat(0)
+    ///     .take(100)
+    ///     .chain(iter::repeat(b'\n').take(1))
+    ///     .chain(iter::repeat(1).take(100))
+    ///     .chain(iter::repeat(b'\n').take(1))
+    ///     .chain(iter::repeat(2).take(100))
+    ///     .collect();
+    ///
+    /// let mut cursor = Cursor::new(bytes);
+    /// let mut seeker = ByteSeeker::new(&mut cursor);
+    /// assert_eq!(seeker.seek_nth_back(b'\n', 2).unwrap(), 100);
+    /// ```
+    pub fn seek_nth_back(&mut self, byte: u8, nth: usize) -> Result<usize> {
+        let mut counter = nth;
+        loop {
+            let pos = self.seek_back(byte)?;
+            counter -= 1;
+            if counter == 0 {
+                return Ok(pos);
+            }
+        }
+    }
+
+    /// Searches for a specified byte **forwards** from the last `seek` position. If the
+    /// initialized `ByteSeeker` haven't been called `seek` before, `seek` will start from
+    /// the beginning.
+    ///
+    /// The `ByteSeeker` is stateful, which means you can call `seek` multiple times until
+    /// reaching the end of underlying byte stream.
+    ///
+    /// # Errors
+    /// If no given byte was found, an error variant of `ErrorKind::ByteNotFound` will be returned.
+    /// If any other errors were encountered, an error variant of `ErrorKind::Io` will be returned.
     ///
     /// # Examples
     ///
@@ -477,7 +624,16 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
         }
     }
 
-    /// Searches for a specified byte (backward) from the last `seek_back` position.
+    /// Searches for a specified byte **backwards** from the last `seek_back` position. If the
+    /// initialized `ByteSeeker` haven't been called `seek_back` before, `seek_back` will start
+    /// from the beginning.
+    ///
+    /// The `ByteSeeker` is stateful, which means you can call `seek_back` multiple times until
+    /// reaching the end of underlying byte stream.
+    ///
+    /// # Errors
+    /// If no given byte was found, an error variant of `ErrorKind::ByteNotFound` will be returned.
+    /// If any other errors were encountered, an error variant of `ErrorKind::Io` will be returned.
     ///
     /// # Examples
     ///
@@ -555,10 +711,6 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
                     println!("after last_read rpos: {}", self.rpos);
                     return Err(Error::new(ErrorKind::ByteNotFound));
                 } else {
-                    /*self.rpos = self
-                    .inner
-                    .seek(SeekFrom::Start((self.rpos - buflen) as u64))?
-                    as usize;*/
                     println!("after failed rpos: {}", self.rpos);
                 }
             }
@@ -754,6 +906,80 @@ mod tests {
         let mut cursor = Cursor::new(bytes);
         let mut seeker = ByteSeeker::new(&mut cursor);
         match seeker.seek_back(b'\n') {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_nth() {
+        let bytes: Vec<u8> = iter::repeat(0)
+            .take(DEFUALT_CHUNK_SIZE)
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(DEFUALT_CHUNK_SIZE))
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(100))
+            .chain(iter::repeat(b'\n').take(1))
+            .collect();
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek_nth(b'\n', 1).unwrap(), DEFUALT_CHUNK_SIZE);
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(
+            seeker.seek_nth(b'\n', 2).unwrap(),
+            DEFUALT_CHUNK_SIZE * 2 + 1
+        );
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(
+            seeker.seek_nth(b'\n', 3).unwrap(),
+            DEFUALT_CHUNK_SIZE * 2 + 100 + 2
+        );
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_nth(b'\n', 4) {
+            Ok(_) => assert!(false),
+            Err(_) => assert!(true),
+        }
+    }
+
+    #[test]
+    fn test_seek_nth_back() {
+        let bytes: Vec<u8> = iter::repeat(0)
+            .take(DEFUALT_CHUNK_SIZE)
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(DEFUALT_CHUNK_SIZE))
+            .chain(iter::repeat(b'\n').take(1))
+            .chain(iter::repeat(0).take(100))
+            .chain(iter::repeat(b'\n').take(1))
+            .collect();
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(
+            seeker.seek_nth_back(b'\n', 1).unwrap(),
+            DEFUALT_CHUNK_SIZE * 2 + 100 + 2
+        );
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(
+            seeker.seek_nth_back(b'\n', 2).unwrap(),
+            DEFUALT_CHUNK_SIZE * 2 + 1
+        );
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        assert_eq!(seeker.seek_nth_back(b'\n', 3).unwrap(), DEFUALT_CHUNK_SIZE);
+
+        let mut cursor = Cursor::new(bytes.clone());
+        let mut seeker = ByteSeeker::new(&mut cursor);
+        match seeker.seek_nth(b'\n', 4) {
             Ok(_) => assert!(false),
             Err(_) => assert!(true),
         }
