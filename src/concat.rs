@@ -283,34 +283,8 @@ impl<P: AsRef<Path>> Concat<P> {
         self.write_header(writer)?;
 
         // Concatenates the given files.
-        let mut has_eof = false;
         for path in self.paths.iter() {
-            let mut file = File::open(path)?;
-            has_eof = ends_with_newline(&mut file)?;
-            let mut reader = BufReader::new(file);
-
-            if self.opts.skip_start > 0 {
-                let mut buf = Vec::new();
-                let mut counter = 0;
-                while counter < self.opts.skip_start {
-                    reader.read_until(b'\n', &mut buf)?;
-                    counter += 1;
-                }
-            }
-
-            loop {
-                let buffer = reader.fill_buf()?;
-                let length = buffer.len();
-                if length == 0 {
-                    break;
-                }
-                writer.write_all(buffer)?;
-                reader.consume(length);
-            }
-
-            if self.opts.newline && !has_eof {
-                writer.write(&vec![b'\n'])?;
-            }
+            self.write_contents(path, writer)?;
 
             if let Some(padding) = self.opts.padding.clone() {
                 writer.write(&padding)?;
@@ -318,8 +292,13 @@ impl<P: AsRef<Path>> Concat<P> {
         }
 
         // Writes a newline if the concatenation result doesn't end with newline.
-        if !has_eof {
-            writer.write(&[b'\n'])?;
+        let mut last_file = File::open(&self.paths[self.paths.len() - 1])?;
+        if !ends_with_newline(&mut last_file)? {
+            if self.opts.crlf {
+                writer.write(b"\r\n")?;
+            } else {
+                writer.write(b"\n")?;
+            }
         }
 
         Ok(())
@@ -333,7 +312,7 @@ impl<P: AsRef<Path>> Concat<P> {
         Ok(())
     }
 
-    fn write_contents<W: Write>(&self, path: P, writer: &mut W) -> Result<()> {
+    fn write_contents<W: Write>(&self, path: &P, writer: &mut W) -> Result<()> {
         let mut file = File::open(path)?;
 
         let ends_nl = ends_with_newline(&mut file)?;
