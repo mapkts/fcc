@@ -350,6 +350,17 @@ impl<P: AsRef<Path>> Concat<P> {
                     writer.write_all(buffer)?;
                     f.consume(length);
                 }
+            } else {
+                let mut reader = BufReader::new(file);
+                loop {
+                    let buffer = reader.fill_buf()?;
+                    let length = buffer.len();
+                    if length == 0 {
+                        break;
+                    }
+                    writer.write_all(buffer)?;
+                    reader.consume(length);
+                }
             }
 
             if self.opts.newline && !ends_nl {
@@ -633,12 +644,10 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// ```
     pub fn seek_back(&mut self, byte: u8) -> Result<usize> {
         if self.done || self.len == 0 {
-            println!("loc 1");
             return Err(Error::new(ErrorKind::ByteNotFound));
         }
 
         if self.len == 1 || self.oneleft {
-            println!("loc 2");
             let mut buf = [0; 1];
             self.inner.read_exact(&mut buf)?;
             self.done = true;
@@ -652,7 +661,6 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
         loop {
             // Reads a chunk of contents.
             let remaining = self.rpos + 1;
-            println!("remaining: {}, rpos: {}", remaining, self.rpos);
             // If the length of remaining bytes is greater than the length of internal buffer, just
             // read the exact number of bytes required to fill the internal buffer. Otherwise, we
             // truncate the length of internal buffer to the length of remaining bytes.
@@ -668,7 +676,6 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
             self.rpos =
                 self.inner
                     .seek(SeekFrom::Start((remaining - buflen) as u64))? as usize;
-            println!("before rpos: {}", self.rpos);
             self.inner.read_exact(&mut self.buf)?;
 
             if let Some(pos) = self.buf.iter().rev().position(|&x| x == byte) {
@@ -678,7 +685,6 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
                     return Ok(cpos);
                 }
                 self.rpos = self.inner.seek(SeekFrom::Start((cpos - 1) as u64))? as usize;
-                println!("after success rpos: {}", self.rpos);
                 if self.rpos == 0 {
                     self.oneleft = true;
                 }
@@ -687,10 +693,8 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
                 if is_last_read {
                     self.done = true;
                     self.rpos = self.inner.seek(SeekFrom::Start(0))? as usize;
-                    println!("after last_read rpos: {}", self.rpos);
                     return Err(Error::new(ErrorKind::ByteNotFound));
                 } else {
-                    println!("after failed rpos: {}", self.rpos);
                 }
             }
         }
