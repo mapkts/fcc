@@ -4,7 +4,7 @@
 [![Linux build status](https://travis-ci.org/mapkts/fcc.svg?branch=master)](https://travis-ci.org/mapkts/fcc)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/mapkts/fcc?svg=true)](https://ci.appveyor.com/project/mapkts/fcc)
 
-`fcc` is a command line program for concatenating files (with advanced options). Besides, it provides both a library that exposes the same functionality at the command line.
+`fcc` is a command line program for concatenating files (with some advanced options). Besides, it also provides a library that exposes the same functionality at the command line.
 
 ### Example of command line utility
 
