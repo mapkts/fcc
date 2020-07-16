@@ -292,14 +292,14 @@ impl<P: AsRef<Path>> Concat<P> {
         }
 
         // Writes a newline if the concatenation result doesn't end with newline.
-        let mut last_file = File::open(&self.paths[self.paths.len() - 1])?;
-        if !ends_with_newline(&mut last_file)? {
-            if self.opts.crlf {
-                writer.write(b"\r\n")?;
-            } else {
-                writer.write(b"\n")?;
-            }
-        }
+        // let mut last_file = File::open(&self.paths[self.paths.len() - 1])?;
+        // if !self.opts.newline && !ends_with_newline(&mut last_file)? {
+        //     if self.opts.crlf {
+        //         writer.write(b"\r\n")?;
+        //     } else {
+        //         writer.write(b"\n")?;
+        //     }
+        // }
 
         Ok(())
     }
@@ -323,32 +323,69 @@ impl<P: AsRef<Path>> Concat<P> {
         } else {
             if self.opts.skip_start > 0 || self.opts.skip_end > 0 {
                 let mut seeker = ByteSeeker::new(&mut file);
-                let start = seeker.seek_nth(b'\n', self.opts.skip_end)? as u64;
-                seeker.reset();
-                let end = seeker.seek_nth_back(b'\n', self.opts.skip_end)? as u64;
-                seeker.reset();
-
-                let mut reader = BufReader::new(file);
-                let mut buf = [0; 1];
-                reader.seek(SeekFrom::Start(end - 1))?;
-                reader.read_exact(&mut buf)?;
-
-                let handle = if buf[0] == b'\r' {
-                    reader.take(end - 1)
-                } else {
-                    reader.take(end)
+                let start = match self.opts.skip_start {
+                    0 => 0,
+                    _ => {
+                        let start = seeker.seek_nth(b'\n', self.opts.skip_start)? + 1;
+                        seeker.reset();
+                        start
+                    }
                 };
 
-                let mut f = handle.into_inner();
-                f.seek(SeekFrom::Start(start - 1))?;
+                let skip_end = if ends_nl && self.opts.skip_end > 0 {
+                    self.opts.skip_end + 1
+                } else {
+                    self.opts.skip_end
+                };
+                let end = match skip_end {
+                    0 => {
+                        let len = file.seek(SeekFrom::End(0))?;
+                        file.seek(SeekFrom::Start(0))?;
+                        (len - 1) as usize
+                    }
+                    _ => {
+                        let end = seeker.seek_nth_back(b'\n', skip_end)?;
+                        seeker.reset();
+                        end
+                    }
+                };
+
+                if end != 0 && end <= start {
+                    return Err(Error::new(ErrorKind::InvalidSkip));
+                }
+
+                let mut reader = BufReader::new(file);
+                let bytes_count = {
+                    // let mut buf = [0; 1];
+                    // reader.seek(SeekFrom::Start(end as u64 - 1))?;
+                    // reader.read_exact(&mut buf)?;
+
+                    // if buf[0] == b'\r' {
+                    //     end - start
+                    // } else {
+                    //     end - start + 1
+                    // }
+                    end - start + 1
+                };
+                let mut read = 0;
+
+                reader.seek(SeekFrom::Start(start as u64))?;
                 loop {
-                    let buffer = f.fill_buf()?;
-                    let length = buffer.len();
+                    let buf = reader.fill_buf()?;
+                    let length = buf.len();
                     if length == 0 {
                         break;
                     }
-                    writer.write_all(buffer)?;
-                    f.consume(length);
+                    if read + length > bytes_count {
+                        let mut buffer = buf.to_owned();
+                        buffer.truncate(bytes_count - read);
+                        writer.write_all(&buffer)?;
+                        reader.consume(length);
+                    } else {
+                        read += length;
+                        writer.write_all(buf)?;
+                        reader.consume(length);
+                    }
                 }
             } else {
                 let mut reader = BufReader::new(file);
@@ -377,6 +414,23 @@ const DEFUALT_CHUNK_SIZE: usize = 1024 * 4;
 
 /// A `Seeker` walks through anything that implements `Read` and `Seek`
 /// to find the position of a certain `byte`.
+///
+/// # Examples
+///
+/// ```
+/// use std::io::Cursor;
+/// use fcc::{ByteSeeker, Result};
+///
+/// fn main() -> Result<()> {
+///     // `Cursor` implements `Read` and `Seek`.
+///     let mut cursor = Cursor::new(vec![1, 2, b'\n', 3]);
+///     let mut seeker = ByteSeeker::new(&mut cursor);
+///
+///     let pos = seeker.seek(b'\n')?;
+///     assert_eq!(pos, 2);
+///     Ok(())
+/// }
+/// ```
 #[derive(Debug)]
 pub struct ByteSeeker<'a, RS: 'a + Read + Seek> {
     inner: &'a mut RS,

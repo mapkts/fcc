@@ -34,14 +34,16 @@ impl Error {
 pub enum ErrorKind {
     /// Represents an I/O error.
     ///
-    /// Can occur when reading or writing to a file.
+    /// Occurs when reading or writing to a file.
     Io(io::Error),
-    /// Occurs if there is nothing to concat.
+    /// Occurs when there is nothing to concat.
     NothingPassed,
     /// Occurs when seeking to a negative offset.
-    Seek,
-    /// Occurs if the seeking byte is not found.
+    SeekNegative,
+    /// Occurs when the seeking byte is not found.
     ByteNotFound,
+    /// Occurs when the file to operate does not contain enough lines to skip.
+    InvalidSkip,
     /// Hints that implies destructuring should not be exhaustive.
     ///
     /// This enum may grow additional variants, so this
@@ -57,8 +59,9 @@ impl fmt::Display for Error {
             ErrorKind::NothingPassed => {
                 write!(f, "Cannot construct a `Concat` instance with no paths")
             }
-            ErrorKind::Seek => write!(f, "Seek to a negative offset"),
+            ErrorKind::SeekNegative => write!(f, "Seek to a negative offset"),
             ErrorKind::ByteNotFound => write!(f, "Byte not found"),
+            ErrorKind::InvalidSkip => write!(f, "Not enough lines to skip"),
             _ => unreachable!(),
         }
     }

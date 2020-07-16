@@ -11,7 +11,7 @@ use crate::error::{Error, ErrorKind, Result};
 ///
 /// # Errors
 ///
-/// If the given reader is empty, an error variant of `ErrorKind::Seek` will
+/// If the given reader is empty, an error variant of `ErrorKind::SeekNegative` will
 /// be returned. If this function encounters other errors, an error variant
 /// of `ErrorKind::Io` will be returned.
 ///
@@ -29,7 +29,7 @@ use crate::error::{Error, ErrorKind, Result};
 pub fn get_last_byte<R: Read + Seek>(f: &mut R) -> Result<u8> {
     let mut buf = [0; 1];
     if let Err(_) = f.seek(SeekFrom::End(-1)) {
-        return Err(Error::new(ErrorKind::Seek));
+        return Err(Error::new(ErrorKind::SeekNegative));
     }
     f.read_exact(&mut buf)?;
     f.seek(SeekFrom::Start(0))?; // reset the internal cursor
@@ -47,7 +47,7 @@ pub fn get_last_byte<R: Read + Seek>(f: &mut R) -> Result<u8> {
 ///
 /// This function has the same error semantics as [`get_last_byte`],
 /// except that if the given file is empty, it will return `Ok(false)`
-/// rather than return an error variant of `Errorkind::Seek`.
+/// rather than return an error variant of `ErrorKind::SeeKNegative`.
 ///
 /// # Examples
 ///
@@ -77,7 +77,7 @@ pub fn ends_with_newline(f: &mut File) -> Result<bool> {
             _ => Ok(false),
         },
         Err(e) => match e.kind() {
-            ErrorKind::Seek => Ok(false),
+            ErrorKind::SeekNegative => Ok(false),
             _ => Err(e),
         },
     }

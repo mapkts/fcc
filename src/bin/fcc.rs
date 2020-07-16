@@ -55,7 +55,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .arg(
             Arg::with_name("skip_start")
                 .short("s")
-                .long("skip_start")
+                .long("skip-start")
                 .takes_value(true)
                 .value_name("NUMBER")
                 .help("Drops n lines from the beginning of each file while concatenating"),
@@ -63,7 +63,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .arg(
             Arg::with_name("skip_end")
                 .short("e")
-                .long("skip_end")
+                .long("skip-end")
                 .takes_value(true)
                 .value_name("NUMBER")
                 .help("Drops n lines from the end of each file while concatenating"),
@@ -74,7 +74,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .long("padding")
                 .takes_value(true)
                 .value_name("STRING")
-                .help("Fills some paddings between each file while concatenating"),
+                .help("Fills some paddings after each file while concatenating"),
         )
         .arg(
             Arg::with_name("crlf")
@@ -125,7 +125,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     }
     if matches.is_present("skip_end") {
         let n = matches.value_of("skip_end").unwrap().parse::<usize>()?;
-        concat.skip_start(n);
+        concat.skip_end(n);
     }
     if matches.is_present("padding") {
         let padding = matches.value_of("padding").unwrap().as_bytes();
