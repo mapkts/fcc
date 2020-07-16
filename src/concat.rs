@@ -670,7 +670,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
 
     /// Searches for a specified byte **backwards** from the last `seek_back` position. If the
     /// initialized `ByteSeeker` haven't been called `seek_back` before, `seek_back` will start
-    /// from the beginning.
+    /// from the end.
     ///
     /// The `ByteSeeker` is stateful, which means you can call `seek_back` multiple times until
     /// reaching the end of underlying byte stream.

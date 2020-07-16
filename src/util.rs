@@ -47,7 +47,7 @@ pub fn get_last_byte<R: Read + Seek>(f: &mut R) -> Result<u8> {
 ///
 /// This function has the same error semantics as [`get_last_byte`],
 /// except that if the given file is empty, it will return `Ok(false)`
-/// rather than return an error variant of `ErrorKind::SeeKNegative`.
+/// rather than return an error variant of `ErrorKind::SeekNegative`.
 ///
 /// # Examples
 ///
