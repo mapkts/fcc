@@ -30,8 +30,6 @@ will result the following
 (contents of 3.csv)
 ```
 
-See `fcc --help` for more help information.
-
 ### Documentation
 
 For detailed documentation, see [https://docs.rs/fcc](https://docs.rs/fcc).

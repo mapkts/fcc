@@ -12,11 +12,6 @@ use crate::util::ends_with_newline;
 /// passing the paths of files you're trying to concatenate. And eventually,
 /// call [`write`] to actually concatenate files and write the result.
 ///
-/// Generally speaking, when using `concat`, you'll first call [`new`],
-/// then chain calls to methods to set each configuration, then call [`oepn`], passing the paths of
-/// files you're trying to concatenate. And eventually, call [`write`] to actually concatenate
-/// files and write the result.
-///
 /// [`new`]: struct.Concat.html#method.new
 /// [`open`]: struct.Concat.html#method.open
 /// [`write`]: struct.Concat.html#method.write
@@ -500,7 +495,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// }
     /// ```
     pub fn reset(&mut self) {
-        self.inner.seek(SeekFrom::Start(0)).unwrap() as usize;
+        self.inner.seek(SeekFrom::Start(0)).unwrap();
         self.buf = vecu8(DEFUALT_CHUNK_SIZE);
         self.lpos = 0;
         self.rpos = if self.len == 0 { 0 } else { self.len - 1 };
