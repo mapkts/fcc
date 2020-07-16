@@ -221,7 +221,7 @@ impl<P: AsRef<Path>> Concat<P> {
     ///
     /// fn main() -> Result<()> {
     ///     let mut concat = Concat::new();
-    ///     let concat = concat.newline(true).open(vec!["foo.csv", "bar.csv"]);
+    ///     let concat = concat.newline(true).use_crlf(true).open(vec!["foo.csv", "bar.csv"]);
     ///     concat.write(&mut std::io::stdout())?;
     ///     Ok(())
     /// }
