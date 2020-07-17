@@ -4,7 +4,11 @@
 [![Linux build status](https://travis-ci.org/mapkts/fcc.svg?branch=master)](https://travis-ci.org/mapkts/fcc)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/mapkts/fcc?svg=true)](https://ci.appveyor.com/project/mapkts/fcc)
 
-`fcc` is a command line program for concatenating files (with some advanced options). Besides, it also provides a library that exposes the same functionality at the command line.
+`fcc` is a command line utility for file concatenation (with some advanced options). Besides, it also provides a library that exposes the same functionality at the command line.
+
+By default, `fcc` reads input files from `<STDIN>` and writes the concatenation result to `<STDOUT>`. You can alter this behaviour by passing command line arguments. When concatenating, you can skip lines from either start or end, enforce the presence of end-of-file newline, and etc.
+
+See `fcc --help` for more help information on how to use this command line utility.
 
 ### Example of command line utility
 
@@ -18,10 +22,16 @@ find [1-3].csv | fcc -nH
 or
 
 ```bash
+echo [1-3].csv | fcc -nH
+```
+
+or
+
+```bash
 fcc -nH -i 1.csv 2.csv 3.csv
 ```
 
-will result the following
+will print the following to stdout
 
 ```
 (header)
@@ -32,7 +42,7 @@ will result the following
 
 ### Documentation
 
-For detailed documentation, see [https://docs.rs/fcc](https://docs.rs/fcc).
+For detailed documentation on how to use `fcc` as a library, see [https://docs.rs/fcc](https://docs.rs/fcc).
 
 ### Installation
 
