@@ -15,6 +15,7 @@ macro_rules! werr {
 fn main() {
     if let Err(e) = run() {
         werr!("fcc: {}", e);
+        std::process::exit(1);
     }
 }
 
@@ -41,16 +42,16 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .short("o")
                 .long("output")
                 .takes_value(true)
-                .help("Writes output to a specific <file> instead of STDOUT"),
+                .help("Writes output to a specific <FILE> instead of <STDOUT>"),
         )
         .arg(Arg::with_name("newline").short("n").long("newline").help(
-            "Appends a newline (\\n) after each file if file is not already ended with newline",
+            "When concatenating, appends a newline \\n after each file if file is not already ended with newline",
         ))
         .arg(
             Arg::with_name("header")
                 .short("H")
                 .long("header")
-                .help("Preserves the header of the first passed-in file and drops the rest"),
+                .help("When concatenating, preserves the header of the first passed-in file and drops the rest"),
         )
         .arg(
             Arg::with_name("skip_start")
@@ -58,7 +59,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .long("skip-start")
                 .takes_value(true)
                 .value_name("NUMBER")
-                .help("Drops n lines from the beginning of each file while concatenating"),
+                .help("When concatenating, drops n lines from the beginning of each file"),
         )
         .arg(
             Arg::with_name("skip_end")
@@ -66,7 +67,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .long("skip-end")
                 .takes_value(true)
                 .value_name("NUMBER")
-                .help("Drops n lines from the end of each file while concatenating"),
+                .help("When concatenating, drops n lines from the end of each file"),
         )
         .arg(
             Arg::with_name("padding")
@@ -74,7 +75,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .long("padding")
                 .takes_value(true)
                 .value_name("STRING")
-                .help("Fills some paddings after each file while concatenating"),
+                .help("When concatenating, fills some paddings after each file while concatenating"),
         )
         .arg(
             Arg::with_name("crlf")
