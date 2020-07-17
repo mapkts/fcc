@@ -1,6 +1,6 @@
 [package]
 authors = ["mapkts <vilscrolls@gmail.com>"]
-description = "file concatenation utilities"
+description = "file concatenation utility"
 documentation = "https://docs.rs/fcc/"
 edition = "2018"
 include = [
@@ -22,3 +22,6 @@ version = "0.3.1"
 [dependencies]
 clap = "2.33"
 memmap = "0.7"
+tempfile = "3.1"
+assert_cmd = "1.0"
+predicates = "1.0"
