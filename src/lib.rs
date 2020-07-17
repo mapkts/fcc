@@ -25,7 +25,7 @@
 //!         .newline(true) // appends a '\n' to each file if the file does not ends with '\n'
 //!         .header(true) // extracts the headers from each file
 //!         .skip_end(1) // skips last line when concatenating
-//!         .pad_with(b"---end of file---\n") // fills some paddings between files
+//!         .pad_with(b"---end of file---\n") // fills some paddings after each file
 //!         .open(files);
 //!
 //!     concat.write(&mut std::io::stdout())?;
@@ -36,7 +36,7 @@
 //! ```
 //!
 //! [`Concat`]: struct.Concat.html
-#![warn(missing_docs)]
+#![deny(missing_docs)]
 
 mod error;
 pub use error::{Error, ErrorKind, Result};
