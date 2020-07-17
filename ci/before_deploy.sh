@@ -17,7 +17,7 @@ main() {
 
     test -f Cargo.lock || cargo generate-lockfile
 
-    cross rustc --bin fcc --target $TARGET --release -- -C lto
+    cross rustc --bin fcc --target $TARGET --release
 
     cp target/$TARGET/release/fcc $stage/
 
