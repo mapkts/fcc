@@ -509,7 +509,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// # Errors
     ///
     /// If the nth occurence of the given byte cannot be found, an error of
-    /// `ErrorKind::ByteNotFound` will be returned. If any other IO errors was encountered, an error of
+    /// `ErrorKind::ByteNotFound` will be returned. If any other IO error was encountered, an error of
     /// `ErrorKind::Io` will be returned.
     ///
     /// # Examples
@@ -548,7 +548,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// # Errors
     ///
     /// If the nth occurence of the given byte cannot be found, an error of
-    /// `ErrorKind::ByteNotFound` will be returned. If any other IO errors was encountered, an error of
+    /// `ErrorKind::ByteNotFound` will be returned. If any other IO error was encountered, an error of
     /// `ErrorKind::Io` will be returned.
     ///
     /// # Examples
@@ -589,8 +589,9 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     /// reaching the end of underlying byte stream.
     ///
     /// # Errors
+    ///
     /// If no given byte was found, an error variant of `ErrorKind::ByteNotFound` will be returned.
-    /// If any other errors were encountered, an error variant of `ErrorKind::Io` will be returned.
+    /// If any other error was encountered, an error variant of `ErrorKind::Io` will be returned.
     ///
     /// # Examples
     ///
@@ -672,7 +673,7 @@ impl<'a, RS: 'a + Read + Seek> ByteSeeker<'a, RS> {
     ///
     /// # Errors
     /// If no given byte was found, an error variant of `ErrorKind::ByteNotFound` will be returned.
-    /// If any other errors were encountered, an error variant of `ErrorKind::Io` will be returned.
+    /// If any other error was encountered, an error variant of `ErrorKind::Io` will be returned.
     ///
     /// # Examples
     ///
