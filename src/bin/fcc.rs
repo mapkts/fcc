@@ -75,7 +75,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
                 .long("padding")
                 .takes_value(true)
                 .value_name("STRING")
-                .help("When concatenating, fills some paddings after each file while concatenating"),
+                .help("When concatenating, fills some paddings after each file"),
         )
         .arg(
             Arg::with_name("crlf")
