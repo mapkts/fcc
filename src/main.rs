@@ -46,7 +46,7 @@ struct Opts {
         short = "s",
         display_order = 3,
         value_name = "NUMBER",
-        conflicts_with_all = &["skip_head_once", "headonce"]
+        conflicts_with = "skip-head-once"
     )]
     skip_head: Option<usize>,
     /// Skips a number of lines from the tail of each source
@@ -55,7 +55,7 @@ struct Opts {
         short = "e",
         display_order = 4,
         value_name = "NUMBER",
-        conflicts_with_all = &["skip_tail_once", "tailonce"]
+        conflicts_with = "skip-tail-once"
     )]
     skip_tail: Option<usize>,
     /// Leaves the first source untouched, and skips a number of lines from the head of the rest sources
@@ -64,7 +64,7 @@ struct Opts {
         short = "S",
         display_order = 5,
         value_name = "NUMBER",
-        conflicts_with_all = &["headonce"]
+        conflicts_with = "headonce"
     )]
     skip_head_once: Option<usize>,
     /// Leaves the last source untouched, and skips a number of lines from the tail of the rest sources
@@ -73,14 +73,14 @@ struct Opts {
         short = "E",
         display_order = 6,
         value_name = "NUMBER",
-        conflicts_with_all = &["tailonce"]
+        conflicts_with = "tailonce"
     )]
     skip_tail_once: Option<usize>,
     /// Skips the head line from each source while leaves the headline of the first source untouched (equivalent to --skip-head-once=1)
-    #[structopt(long, short = "H", display_order = 7)]
+    #[structopt(long, short = "H", display_order = 7, conflicts_with = "skip-head")]
     headonce: bool,
     /// Skips the tail line from each source while leaves the headline of the first source untouched (equivalent to --skip-tail-once=1)
-    #[structopt(long, short = "T", display_order = 8)]
+    #[structopt(long, short = "T", display_order = 8, conflicts_with = "skip-tail")]
     tailonce: bool,
     /// Sets the skip mode
     #[structopt(
@@ -150,17 +150,6 @@ fn run(opts: &Opts) -> admerge::Result<()> {
     };
 
     let mut merger = FileMerger::new();
-
-    debug_assert!(
-        !(opts.skip_head.is_some() && opts.skip_head_once.is_some())
-            && !(opts.skip_head.is_some() && opts.headonce)
-            && !(opts.skip_head_once.is_some() && opts.headonce)
-    );
-    debug_assert!(
-        !(opts.skip_tail.is_some() && opts.skip_tail_once.is_some())
-            && !(opts.skip_tail.is_some() && opts.tailonce)
-            && !(opts.skip_tail_once.is_some() && opts.tailonce)
-    );
     match opts.skip_mode.as_str() {
         "lines" => {
             if let Some(n) = opts.skip_head {
