@@ -4,47 +4,154 @@
 [![Linux build status](https://travis-ci.org/mapkts/fcc.svg?branch=master)](https://travis-ci.org/mapkts/fcc)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/mapkts/fcc?svg=true)](https://ci.appveyor.com/project/mapkts/fcc)
 
-`fcc` is a command line utility for file concatenation (with some advanced options). Besides, it also provides a library that exposes the same functionality at the command line.
+A command line utility for file concatenation, featuring:
 
-By default, `fcc` reads input files from `<STDIN>` and writes the concatenation result to `<STDOUT>`. You can alter this behaviour by passing command line arguments. When concatenating, you can skip lines from either start or end, enforce the presence of end-of-file newline, and etc.
+- Accepts input files from either `STDIN` or arg `-i`.
+- Writes concatenation result to either `STDOUT` or a specific file given by arg `-o`.
+- Allows you to skip unwanted contents of each source from either start or end.
+- Allows you to fill some paddings before, between and/or after each source.
+- Allows you to force the presence of ending newlines after each source.
 
-See `fcc --help` for more help information on how to use this command line utility.
+See `fcc --help` for more help information on how to use this command line utility. If you want a rust library that provides similar functionalities, see [admerge](https://crates.io/crates/admerge).
 
-### Example of command line utility
+## Examples
 
-Assumes we have three tabular csv files that contain identical headers. We want to join all the contents of them
-and preserve only one header (-H). Meanwhile, we want to make sure all files should end with a newline (-n).
+Assumes we have three text files `1.txt`, `2.txt` and `3.txt` in current working directory.
+
+The content of `1.txt` is:
 
 ```bash
-find [1-3].csv | fcc -nH
+111 112 113
+121 122 123
+131 132 133
+```
+
+The content of `2.txt` is:
+
+```bash
+211 212 213
+221 222 223
+231 232 233
+```
+
+The content of `3.txt` is:
+
+```bash
+311 312 313
+321 322 323
+331 332 333
+```
+
+### Concatenate them without configurations.
+
+```bash
+find [1-3].txt | fcc
 ```
 
 or
 
 ```bash
-echo [1-3].csv | fcc -nH
+echo [1-3].txt | fcc
 ```
 
 or
 
 ```bash
-fcc -nH -i 1.csv 2.csv 3.csv
+fcc -i 1.txt 2.txt 3.txt
 ```
 
-will print the following to stdout
+will print the following text to stdout
+
+```bash
+111 112 113
+121 122 123
+131 132 133211 212 213
+221 222 223
+231 232 233311 312 313
+321 322 323
+331 332 333
+```
+
+### Concatenate them with `--newline`
+
+```bash
+echo [1-3].txt | fcc -n
+```
+
+will print the following text to stdout:
+
+```bash
+111 112 113
+121 122 123
+131 132 133
+211 212 213
+221 222 223
+231 232 233
+311 312 313
+321 322 323
+331 332 333
 
 ```
-(header)
-(contents of 1.csv)
-(contents of 2.csv)
-(contents of 3.csv)
+
+### Concatenate them with `skip-head=1` and `skip-tail=1`
+
+```bash
+echo [1-3].txt | fcc -n --skip-head=1 --skip-tail=1
 ```
 
-### Documentation
+will print the following text to stdout:
 
-For detailed documentation on how to use `fcc` as a library, see [https://docs.rs/fcc](https://docs.rs/fcc).
+```bash
+121 122 123
+221 222 223
+321 322 323
 
-### Installation
+```
+
+### Concatenate them with `newline` and `--headonce`
+
+```bash
+echo [1-3].txt | fcc -n --headonce
+```
+
+will print the following text to stdout:
+
+```bash
+111 112 113
+121 122 123
+131 132 133
+221 222 223
+231 232 233
+321 322 323
+331 332 333
+
+```
+
+### Concatenate them with `--newline` and `padding="padding between\n"
+
+```bash
+echo [1-3].txt | fcc -n --padding="padding between
+"
+```
+
+will print the following text to stdout:
+
+```bash
+111 112 113
+121 122 123
+131 132 133
+padding between
+211 212 213
+221 222 223
+231 232 233
+padding between
+311 312 313
+321 322 323
+331 332 333
+
+```
+
+## Installation
 
 Binaries for Windows, Linux and macOS are available [from Github](https://github.com/mapkts/fcc/releases/latest).
 
@@ -55,10 +162,11 @@ git clone git://github.com/mapkts/fcc
 cd fcc
 cargo build --release
 ```
+
 Compilation will probably take a few minutes depending on your machine. The
 binary will end up in `./target/release/fcc`.
 
-### License
+## License
 
 `fcc` is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 
