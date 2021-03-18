@@ -127,7 +127,7 @@ will print the following text to stdout:
 
 ```
 
-### Concatenate them with `--newline` and `padding="padding between\n"
+### Concatenate them with `--newline` and `padding="padding between\n"`
 
 ```bash
 echo [1-3].txt | fcc -n --padding="padding between
