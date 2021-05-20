@@ -12,7 +12,7 @@ A command line utility for file concatenation, featuring:
 - Allows you to fill some paddings before, between and/or after each source.
 - Allows you to force the presence of ending newlines after each source.
 
-See `fcc --help` for more help information on how to use this command line utility. If you want a rust library that provides similar functionalities, see [admerge](https://crates.io/crates/admerge).
+See `fcc --help` for more help information on how to use this command line utility. And if you want a rust library that provides similar functionalities, see [admerge](https://crates.io/crates/admerge).
 
 ## Examples
 
@@ -168,6 +168,6 @@ binary will end up in `./target/release/fcc`.
 
 ## License
 
-`fcc` is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
+`fcc` is distributed under the terms of either the MIT license or the Apache License (Version 2.0).
 
 See the [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) files in this repository for more information.

@@ -1,6 +1,6 @@
 [package]
 authors = ["Aaron Taner <vilscrolls@gmail.com>"]
-description = "file concatenation utility"
+description = "File concatenation utility"
 documentation = "https://docs.rs/fcc/"
 edition = "2018"
 include = [
@@ -17,7 +17,7 @@ license = "MIT OR Apache-2.0"
 name = "fcc"
 readme = "README.md"
 repository = "https://github.com/mapkts/fcc/"
-version = "0.4.1"
+version = "0.4.2"
 
 [dependencies]
 admerge = "0.1.3"

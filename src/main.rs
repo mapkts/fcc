@@ -16,10 +16,10 @@ macro_rules! stderr {
 #[structopt(
     name = env!("CARGO_PKG_NAME"),
     version = env!("CARGO_PKG_VERSION"),
-    about = "reads files from <STDIN> and merges those files into <STDOUT>.",
+    about = "reads files from <STDIN> and merges their contents into <STDOUT>.",
     after_help = "NOTES:
 
-    1. If read from <STDIN>, file paths must be space-separated or newline-separated."
+    1. When reading from <STDIN>, file paths must be space-separated or newline-separated."
 )]
 struct Opts {
     /// Sets the input files, reads from <STDIN> if not present
@@ -58,7 +58,7 @@ struct Opts {
         conflicts_with = "skip-tail-once"
     )]
     skip_tail: Option<usize>,
-    /// Leaves the first source untouched, and skips a number of lines from the head of the rest sources
+    /// Skips a number of lines from the head of each source, while leaving the first source untouched.
     #[structopt(
         long,
         short = "S",
@@ -67,7 +67,7 @@ struct Opts {
         conflicts_with = "headonce"
     )]
     skip_head_once: Option<usize>,
-    /// Leaves the last source untouched, and skips a number of lines from the tail of the rest sources
+    /// Skips a number of lines from the tail of each source, while leaving the last source untouched.
     #[structopt(
         long,
         short = "E",
@@ -76,10 +76,10 @@ struct Opts {
         conflicts_with = "tailonce"
     )]
     skip_tail_once: Option<usize>,
-    /// Skips the head line from each source while leaves the headline of the first source untouched (equivalent to --skip-head-once=1)
+    /// Skips the head line from each source, while leaving the head line of the first source untouched (equivalent to --skip-head-once=1)
     #[structopt(long, short = "H", display_order = 7, conflicts_with = "skip-head")]
     headonce: bool,
-    /// Skips the tail line from each source while leaves the headline of the first source untouched (equivalent to --skip-tail-once=1)
+    /// Skips the tail line from each source, while leaving the tail line of the last source untouched (equivalent to --skip-tail-once=1)
     #[structopt(long, short = "T", display_order = 8, conflicts_with = "skip-tail")]
     tailonce: bool,
     /// Sets the skip mode
@@ -92,10 +92,10 @@ struct Opts {
             possible_values = &["bytes", "lines"],
         )]
     skip_mode: String,
-    /// Skips a number of lines from the head of each source
+    /// Fills some padding between each source
     #[structopt(long, short = "p", display_order = 10, value_name = "STRING")]
     padding: Option<String>,
-    /// Fills some padding between each source
+    /// Controls where paddings should be inserted into.
     #[structopt(
             long,
             short = "P",
@@ -105,7 +105,7 @@ struct Opts {
             possible_values = &["beforestart", "afterend", "between", "all"],
         )]
     pad_mode: String,
-    /// Appends a newline `\n` after each source if source is not already ended with newline
+    /// Appends a newline after each source if source is not already ended with newline
     #[structopt(long, short = "n", display_order = 12)]
     newline: bool,
     /// The style of newline, either unix-style `LF` or dos-style `CRLF`
@@ -122,7 +122,6 @@ struct Opts {
 
 fn main() {
     let opts = Opts::from_args();
-    // println!("{:?}", opts);
 
     if let Err(e) = run(&opts) {
         stderr!("fcc: {}", e);
@@ -142,7 +141,7 @@ fn run(opts: &Opts) -> admerge::Result<()> {
                 .split(&[' ', '\n'][..])
                 .filter(|v| v != &"")
                 .map(|v| v.trim())
-                .map(|v| PathBuf::from(v))
+                .map(PathBuf::from)
                 .collect::<Vec<PathBuf>>();
 
             paths
