@@ -85,23 +85,6 @@ fn can_accept_newline_separated_paths_through_stdin() {
 }
 
 #[test]
-fn can_accept_newline_and_space_separated_paths_through_stdin() {
-    let files = testing_files!();
-    let mut cmd = Command::cargo_bin("fcc").unwrap();
-    cmd.write_stdin(format!(
-        "{} {}\n{}",
-        files[0].path().to_str().unwrap(),
-        files[1].path().to_str().unwrap(),
-        files[2].path().to_str().unwrap()
-    ))
-    .assert()
-    .stdout(predicate::eq(
-        b"111 112\n121 122\n131 132\n211 212\n221 222\n231 232\n311 312\n332 322\n331 332"
-            as &[u8],
-    ));
-}
-
-#[test]
 fn can_write_output_to_a_file() {
     let dir = tempdir().unwrap();
     let file_path = dir.path().join("output.txt");
