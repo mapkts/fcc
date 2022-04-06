@@ -1,7 +1,7 @@
 # fcc
 
 [![Crates.io](https://img.shields.io/crates/v/fcc?style=flat-square)](https://crates.io/crates/fcc)
-[![Linux build status](https://travis-ci.org/mapkts/fcc.svg?branch=master)](https://travis-ci.org/mapkts/fcc)
+[![Linux build status](https://travis-ci.com/mapkts/fcc.svg?branch=master)](https://travis-ci.com/mapkts/fcc)
 [![Windows build status](https://ci.appveyor.com/api/projects/status/github/mapkts/fcc?svg=true)](https://ci.appveyor.com/project/mapkts/fcc)
 
 A command line utility for file concatenation, featuring:
