@@ -137,12 +137,21 @@ fn run(opts: &Opts) -> admerge::Result<()> {
             let mut buf = String::new();
             std::io::stdin().lock().read_to_string(&mut buf)?;
 
-            let paths = buf
-                .split(&[' ', '\n'][..])
+            let mut paths = buf
+                .split('\n')
                 .filter(|v| v != &"")
                 .map(|v| v.trim())
                 .map(PathBuf::from)
                 .collect::<Vec<PathBuf>>();
+
+            if paths.len() <= 1 {
+                paths = buf
+                    .split(' ')
+                    .filter(|v| v != &"")
+                    .map(|v| v.trim())
+                    .map(PathBuf::from)
+                    .collect::<Vec<PathBuf>>();
+            }
 
             paths
         }
